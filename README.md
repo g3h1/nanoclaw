@@ -76,6 +76,23 @@ From a channel you own or administer, you can manage groups and tasks:
 @Andy join the Family Chat group
 ```
 
+### Talking from the terminal
+
+The cli channel ships always-on. Two clients:
+
+- `pnpm run chat "what's on my calendar today?"` — one-shot.
+- `pnpm run chat-repl` — interactive REPL with slash commands,
+  multi-line input, history, and color. Optionally symlinkable as
+  `nclaw`:
+
+  ```bash
+  ln -sf "$(pwd)/scripts/nclaw" ~/.local/bin/nclaw
+  ```
+
+Both connect to a chmod-0600 Unix socket at `data/cli.sock` — no
+credentials, no platform integrations. See [docs/cli-repl.md](docs/cli-repl.md)
+for the full reference and the wire protocol.
+
 ## Customizing
 
 NanoClaw doesn't use configuration files. To make changes, just tell Claude Code what you want:

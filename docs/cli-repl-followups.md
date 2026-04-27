@@ -1,6 +1,7 @@
 # CLI REPL — follow-ups
 
-Tracks deferred work on the CLI REPL (`scripts/chat-repl.ts`, `scripts/nclaw`).
+Tracks deferred work on the CLI REPL (`scripts/chat-repl.ts`,
+`scripts/nclaw`). Parent doc: [`cli-repl.md`](cli-repl.md).
 
 ## Raw-mode line editor with Alt+Enter for inline newline
 

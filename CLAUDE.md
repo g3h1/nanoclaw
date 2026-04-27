@@ -72,11 +72,13 @@ Exactly one writer per file — no cross-mount lock contention. Heartbeat is a f
 | `src/group-init.ts` | Per-agent-group filesystem scaffold (CLAUDE.md, skills, agent-runner-src overlay) |
 | `src/db/` | DB layer — agent_groups, messaging_groups, sessions, user_roles, user_dms, pending_*, migrations |
 | `src/channels/` | Channel adapter infra (registry, Chat SDK bridge); specific channel adapters are skill-installed from the `channels` branch |
+| `src/channels/cli.ts` | The cli/local channel — always-on local Unix socket at `data/cli.sock`. Operator-trusted (chmod 0600). Drives `nclaw`/`chat-repl`. See [docs/cli-repl.md](docs/cli-repl.md) |
 | `src/providers/` | Host-side provider container-config (`claude` baked in; `opencode` etc. installed from the `providers` branch) |
 | `container/agent-runner/src/` | Agent-runner: poll loop, formatter, provider abstraction, MCP tools, destinations |
 | `container/skills/` | Container skills mounted into every agent session |
 | `groups/<folder>/` | Per-agent-group filesystem (CLAUDE.md, skills, per-group `agent-runner-src/` overlay) |
 | `scripts/init-first-agent.ts` | Bootstrap the first DM-wired agent (used by `/init-first-agent` skill) |
+| `scripts/chat-repl.ts` + `scripts/nclaw` | Interactive terminal client for the cli channel; `nclaw` is the bash shim. See [docs/cli-repl.md](docs/cli-repl.md) |
 
 ## Channels and Providers (skill-installed)
 
