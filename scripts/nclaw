@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# nclaw — interactive terminal chat with a NanoClaw agent.
+#
+# Resolves the symlink (so `~/.local/bin/nclaw -> /path/to/nanoclaw/scripts/nclaw`
+# works from any cwd), cd's into the repo, then exec's chat-repl via tsx.
+#
+# Install:
+#   ln -sf "$(pwd)/scripts/nclaw" ~/.local/bin/nclaw
+# Make sure ~/.local/bin is on PATH.
+set -euo pipefail
+DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+cd "$DIR"
+exec pnpm exec tsx scripts/chat-repl.ts "$@"
