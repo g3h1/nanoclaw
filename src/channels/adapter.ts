@@ -98,6 +98,13 @@ export interface OutboundMessage {
   kind: string;
   content: unknown; // parsed JSON from messages_out
   files?: OutboundFile[]; // file attachments from the session outbox
+  /**
+   * The agent group that produced this message. Adapters that surface
+   * source-agent identity (cli per-agent labels) read this; others ignore
+   * it. Optional because legacy callers and adapters that don't need it
+   * shouldn't have to plumb it.
+   */
+  agentGroupId?: string;
 }
 
 /** Discovered conversation info (from syncConversations). */

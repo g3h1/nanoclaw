@@ -38,7 +38,9 @@ import net from 'net';
 import path from 'path';
 
 import { DATA_DIR } from '../config.js';
+import { getAgentGroup } from '../db/agent-groups.js';
 import { log } from '../log.js';
+import { getOwners } from '../modules/permissions/db/user-roles.js';
 import type { ChannelAdapter, ChannelSetup, DeliveryAddress, InboundEvent, OutboundMessage } from './adapter.js';
 import { registerChannelAdapter } from './channel-registry.js';
 
@@ -126,8 +128,21 @@ function createAdapter(): ChannelAdapter {
       }
       const text = extractText(message);
       if (text === null) return undefined;
+      let agent: string | undefined;
+      if (message.agentGroupId) {
+        try {
+          const group = getAgentGroup(message.agentGroupId);
+          if (group?.name) agent = group.name;
+        } catch (err) {
+          log.warn('CLI: failed to resolve agent name for label', {
+            err,
+            agentGroupId: message.agentGroupId,
+          });
+        }
+      }
       try {
-        client.write(JSON.stringify({ text }) + '\n');
+        const payload = agent ? { text, agent } : { text };
+        client.write(JSON.stringify(payload) + '\n');
       } catch (err) {
         log.warn('Failed to write to CLI client', { err });
       }
@@ -140,9 +155,20 @@ function createAdapter(): ChannelAdapter {
     // to be a routed (`to`-bearing) one-shot, we leave the existing chat
     // client in place. Only plain chat connections participate in supersede.
     let claimedChatSlot = false;
+    let operatorUserId: string | null = null;
+    let operatorResolved = false;
 
-    const claimChatSlot = () => {
-      if (claimedChatSlot) return;
+    // Bind the connected socket (chmod 0600) to the global owner's user_id
+    // so command-gate accepts admin commands like /clear. Resolved once on
+    // first chat-slot claim — owners added/revoked at runtime are rare, and
+    // re-resolving per line is needless. If no owner is configured, leave
+    // the senderId null and command-gate will deny admin commands as today.
+    const claimChatSlot = (): string | null => {
+      if (!operatorResolved) {
+        operatorResolved = true;
+        operatorUserId = resolveOperatorUserId();
+      }
+      if (claimedChatSlot) return operatorUserId;
       claimedChatSlot = true;
       if (client && client !== socket) {
         try {
@@ -153,7 +179,8 @@ function createAdapter(): ChannelAdapter {
         }
       }
       client = socket;
-      log.info('CLI client connected');
+      log.info('CLI client connected', { operator: operatorUserId ?? '(none)' });
+      return operatorUserId;
     };
 
     let buffer = '';
@@ -178,7 +205,7 @@ function createAdapter(): ChannelAdapter {
     });
   }
 
-  async function handleLine(line: string, config: ChannelSetup, claimChatSlot: () => void): Promise<void> {
+  async function handleLine(line: string, config: ChannelSetup, claimChatSlot: () => string | null): Promise<void> {
     let payload: {
       text?: unknown;
       to?: unknown;
@@ -227,7 +254,10 @@ function createAdapter(): ChannelAdapter {
 
     // Plain chat — claim the slot (evicting any prior client) and route via
     // the standard onInbound path (adapter injects its own channelType).
-    claimChatSlot();
+    // claimChatSlot returns the resolved operator user_id (the global owner)
+    // so command-gate honors admin commands. Falls back to the synthetic
+    // 'cli:local' id if no owner is configured.
+    const operatorUserId = claimChatSlot();
     try {
       await config.onInbound(PLATFORM_ID, null, {
         id: `cli-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -236,11 +266,30 @@ function createAdapter(): ChannelAdapter {
         content: {
           text: payload.text,
           sender: 'cli',
-          senderId: `cli:${PLATFORM_ID}`,
+          senderId: operatorUserId ?? `cli:${PLATFORM_ID}`,
         },
       });
     } catch (err) {
       log.error('CLI: onInbound threw', { err });
+    }
+  }
+
+  function resolveOperatorUserId(): string | null {
+    try {
+      const owners = getOwners();
+      if (owners.length === 0) {
+        log.warn('CLI socket connected but no global owner configured; admin commands will be denied');
+        return null;
+      }
+      if (owners.length > 1) {
+        log.info('CLI socket: multiple owners present, picking first by grant time', {
+          count: owners.length,
+        });
+      }
+      return owners[0].user_id;
+    } catch (err) {
+      log.warn('CLI socket: failed to resolve operator user id; admin commands will be denied', { err });
+      return null;
     }
   }
 
