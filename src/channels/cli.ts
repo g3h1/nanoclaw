@@ -205,11 +205,7 @@ function createAdapter(): ChannelAdapter {
     });
   }
 
-  async function handleLine(
-    line: string,
-    config: ChannelSetup,
-    claimChatSlot: () => string | null,
-  ): Promise<void> {
+  async function handleLine(line: string, config: ChannelSetup, claimChatSlot: () => string | null): Promise<void> {
     let payload: {
       text?: unknown;
       to?: unknown;
@@ -282,9 +278,7 @@ function createAdapter(): ChannelAdapter {
     try {
       const owners = getOwners();
       if (owners.length === 0) {
-        log.warn(
-          'CLI socket connected but no global owner configured; admin commands will be denied',
-        );
+        log.warn('CLI socket connected but no global owner configured; admin commands will be denied');
         return null;
       }
       if (owners.length > 1) {
@@ -294,10 +288,7 @@ function createAdapter(): ChannelAdapter {
       }
       return owners[0].user_id;
     } catch (err) {
-      log.warn(
-        'CLI socket: failed to resolve operator user id; admin commands will be denied',
-        { err },
-      );
+      log.warn('CLI socket: failed to resolve operator user id; admin commands will be denied', { err });
       return null;
     }
   }
