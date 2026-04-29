@@ -30,6 +30,7 @@ import {
   ensureSchema,
   openInboundDb as openInboundDbRaw,
   openOutboundDb as openOutboundDbRaw,
+  openOutboundDbForWrite as openOutboundDbForWriteRaw,
   upsertSessionRouting,
   insertMessage,
   migrateMessagesInTable,
@@ -312,7 +313,10 @@ export function writeOutboundDirect(
     content: string;
   },
 ): void {
-  const db = openOutboundDb(agentGroupId, sessionId);
+  // openOutboundDb is host-read-only by design; writeOutboundDirect is the
+  // single exception (gate-denial replies that must reach delivery without
+  // waking a container). Use the explicit writable opener.
+  const db = openOutboundDbForWriteRaw(outboundDbPath(agentGroupId, sessionId));
   try {
     db.prepare(
       `INSERT OR IGNORE INTO messages_out (id, seq, timestamp, kind, platform_id, channel_type, thread_id, content)
