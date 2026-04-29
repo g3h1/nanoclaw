@@ -32,6 +32,19 @@ export function openOutboundDb(dbPath: string): Database.Database {
   return db;
 }
 
+/**
+ * Open the outbound DB writable. Reserved for the command-gate denial path
+ * (writeOutboundDirect) — host-side writes here violate the one-writer
+ * invariant, so callers must only use this when no container is running for
+ * the session, or accept the small race risk for one-shot inserts.
+ */
+export function openOutboundDbForWrite(dbPath: string): Database.Database {
+  const db = new Database(dbPath);
+  db.pragma('journal_mode = DELETE');
+  db.pragma('busy_timeout = 5000');
+  return db;
+}
+
 export function upsertSessionRouting(
   db: Database.Database,
   routing: { channel_type: string | null; platform_id: string | null; thread_id: string | null },
