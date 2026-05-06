@@ -1,5 +1,23 @@
 {
   "sandbox": {
     "enabled": false
+  },
+  "permissions": {
+    "allow": [
+      "Bash(onecli --help *)",
+      "Bash(onecli agents list *)",
+      "Bash(onecli version *)",
+      "Bash(pnpm run build)",
+      "Bash(pnpm run build *)",
+      "Bash(pnpm run typecheck)",
+      "Bash(pnpm run typecheck *)",
+      "Bash(git fetch *)",
+      "Bash(command -v *)",
+      "Bash(systemctl --user is-active *)",
+      "Bash(systemctl --user status *)",
+      "Bash(systemctl --user list-unit-files *)",
+      "Bash(systemctl --user list-units *)",
+      "Bash(systemctl --user cat *)"
+    ]
   }
 }
