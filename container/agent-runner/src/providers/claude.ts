@@ -244,6 +244,13 @@ function createPreCompactHook(assistantName?: string): HookCallback {
 const CLAUDE_CODE_AUTO_COMPACT_WINDOW = process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW || '165000';
 
 /**
+ * Default model for the Claude provider. Operator override:
+ * NANOCLAW_DEFAULT_MODEL — set in host env (or per-agent-group container
+ * config) to use a different model without editing source.
+ */
+const DEFAULT_MODEL = process.env.NANOCLAW_DEFAULT_MODEL || 'claude-opus-4-7';
+
+/**
  * Stale-session detection. Matches Claude Code's error text when a
  * resumed session can't be found — missing transcript .jsonl, unknown
  * session ID, etc.
@@ -286,6 +293,7 @@ export class ClaudeProvider implements AgentProvider {
         additionalDirectories: this.additionalDirectories,
         resume: input.continuation,
         pathToClaudeCodeExecutable: '/pnpm/claude',
+        model: DEFAULT_MODEL,
         systemPrompt: instructions ? { type: 'preset' as const, preset: 'claude_code' as const, append: instructions } : undefined,
         allowedTools: [
           ...TOOL_ALLOWLIST,
