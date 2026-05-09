@@ -105,12 +105,15 @@ export interface RoutingContext {
  * Uses the first message's routing fields.
  */
 export function extractRouting(messages: MessageInRow[]): RoutingContext {
-  const first = messages[0];
+  // Use the newest message in the batch so threaded replies land alongside
+  // what the agent is actually responding to — not the oldest item bundled
+  // into the same wake.
+  const latest = messages[messages.length - 1];
   return {
-    platformId: first?.platform_id ?? null,
-    channelType: first?.channel_type ?? null,
-    threadId: first?.thread_id ?? null,
-    inReplyTo: first?.id ?? null,
+    platformId: latest?.platform_id ?? null,
+    channelType: latest?.channel_type ?? null,
+    threadId: latest?.thread_id ?? null,
+    inReplyTo: latest?.id ?? null,
   };
 }
 

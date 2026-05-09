@@ -145,6 +145,26 @@ describe('routing', () => {
     expect(routing.threadId).toBe('thread-456');
     expect(routing.inReplyTo).toBe('m1');
   });
+
+  it('should pick the newest message when batched, so threaded replies match the latest input', () => {
+    getInboundDb()
+      .prepare(
+        `INSERT INTO messages_in (id, kind, timestamp, status, platform_id, channel_type, thread_id, content)
+         VALUES ('old', 'chat', datetime('now','-2 minutes'), 'pending', 'chan', 'slack', 'thread-old', '{"text":"first"}')`,
+      )
+      .run();
+    getInboundDb()
+      .prepare(
+        `INSERT INTO messages_in (id, kind, timestamp, status, platform_id, channel_type, thread_id, content)
+         VALUES ('new', 'chat', datetime('now'),            'pending', 'chan', 'slack', null,         '{"text":"second"}')`,
+      )
+      .run();
+
+    const messages = getPendingMessages();
+    const routing = extractRouting(messages);
+    expect(routing.inReplyTo).toBe('new');
+    expect(routing.threadId).toBeNull();
+  });
 });
 
 describe('mock provider', () => {
