@@ -39,7 +39,7 @@ import { runTelegramChannel } from './channels/telegram.js';
 import { runWhatsAppChannel } from './channels/whatsapp.js';
 import { pingCliAgent, type PingResult } from './lib/agent-ping.js';
 import { brightSelect } from './lib/bright-select.js';
-import { offerClaudeAssist } from './lib/claude-assist.js';
+import { offerClaudeOnFailure } from './lib/claude-handoff.js';
 import {
   applyToEnv,
   parseFlags,
@@ -48,6 +48,8 @@ import {
 } from './lib/setup-config-parse.js';
 import { runAdvancedScreen } from './lib/setup-config-screen.js';
 import { runWindowedStep } from './lib/windowed-runner.js';
+import { runUninstallFlow } from './uninstall/flow.js';
+import { detectExistingInstall } from './uninstall/scan.js';
 import { detectRegisteredGroups, detectExistingDisplayName } from './environment.js';
 import { pollHealth } from './onecli.js';
 import { getLaunchdLabel, getSystemdUnit } from '../src/install-slug.js';
@@ -88,6 +90,17 @@ async function main(): Promise<void> {
   let configValues = { ...readFromEnv(), ...flagResult.values };
   applyToEnv(configValues);
 
+  // --uninstall routes to the uninstall flow before any setup side effects —
+  // in particular before initProgressionLog(), so an uninstall never resets
+  // logs/setup.log on its way to (possibly) deleting logs/ entirely.
+  if (configValues.uninstall === true) {
+    await runUninstallFlow({
+      dryRun: configValues.dryRun === true,
+      yes: configValues.yes === true,
+      invokedFrom: 'flag',
+    });
+  }
+
   printIntro();
   initProgressionLog();
   phEmit('auto_started');
@@ -120,6 +133,37 @@ async function main(): Promise<void> {
       .map((s) => s.trim())
       .filter(Boolean),
   );
+
+  // Offer removal when setup lands on an existing install. Skipped on every
+  // resume path — both the fail() retry and the sg-docker re-exec pass
+  // NANOCLAW_SKIP (and the latter sets NANOCLAW_REEXEC_SG) — so the prompt
+  // appears at most once per fresh run.
+  const isResume = process.env.NANOCLAW_REEXEC_SG === '1' || skip.size > 0;
+  if (!isResume && detectExistingInstall(process.cwd())) {
+    const action = ensureAnswer(
+      await brightSelect<'keep' | 'uninstall'>({
+        message: 'NanoClaw is already installed in this folder. What would you like to do?',
+        options: [
+          {
+            value: 'keep',
+            label: 'Keep it & continue setup',
+            hint: 'recommended — re-running setup is safe',
+          },
+          {
+            value: 'uninstall',
+            label: 'Uninstall NanoClaw & exit',
+            hint: 'removes service, data, and agent files — asks before each step',
+          },
+        ],
+        initialValue: 'keep',
+      }),
+    ) as 'keep' | 'uninstall';
+    setupLog.userInput('existing_install', action);
+    phEmit('existing_install_detected', { action });
+    if (action === 'uninstall') {
+      await runUninstallFlow({ dryRun: false, yes: false, invokedFrom: 'setup-detection' });
+    }
+  }
 
   if (!skip.has('environment')) {
     const res = await runQuietStep('environment', {
@@ -416,7 +460,7 @@ async function main(): Promise<void> {
       } else {
         phEmit('first_chat_failed', { reason: ping });
         renderPingFailureNote(ping);
-        await offerClaudeAssist({
+        await offerClaudeOnFailure({
           stepName: 'cli-agent',
           msg:
             ping === 'socket_error'
@@ -468,7 +512,7 @@ async function main(): Promise<void> {
       } else if (channelChoice === 'imessage') {
         result = await runIMessageChannel(displayName!);
       } else if (channelChoice === 'other') {
-        await askOtherChannelName();
+        result = await askOtherChannelName();
       } else {
         p.log.info(
           brandBody(
@@ -528,7 +572,7 @@ async function main(): Promise<void> {
         service_running: res.terminal?.fields.SERVICE === 'running',
         has_credentials: res.terminal?.fields.CREDENTIALS === 'configured',
       });
-      await offerClaudeAssist({
+      await offerClaudeOnFailure({
         stepName: 'verify',
         msg: summary || 'Verification completed with unresolved issues.',
         hint: `Terminal block: ${JSON.stringify(res.terminal?.fields ?? {})}`,
@@ -740,11 +784,37 @@ async function runAuthStep(): Promise<void> {
           label: 'Paste an Anthropic API key',
           hint: 'pay-per-use via console.anthropic.com',
         },
+        {
+          value: 'skip',
+          label: "Skip — I'll connect later",
+          hint: 'not recommended — Claude helps debug setup issues',
+        },
       ],
     }),
-  ) as 'subscription' | 'oauth' | 'api';
+  ) as 'subscription' | 'oauth' | 'api' | 'skip';
   setupLog.userInput('auth_method', method);
   phEmit('auth_method_chosen', { method });
+
+  if (method === 'skip') {
+    const confirmed = ensureAnswer(
+      await p.confirm({
+        message:
+          "Skip Claude sign-in? The agent won't be able to run until you connect, and we won't be able to help debug setup errors.",
+        initialValue: false,
+      }),
+    );
+    if (!confirmed) {
+      // Loop back to the auth picker so they can choose a real method.
+      return runAuthStep();
+    }
+    setupLog.step('auth', 'skipped', 0, { REASON: 'user-skipped' });
+    p.log.warn(
+      brandBody(
+        'Claude sign-in skipped. Re-run setup or run `bash nanoclaw.sh` to finish later.',
+      ),
+    );
+    return;
+  }
 
   if (method === 'subscription') {
     await runSubscriptionAuth();
@@ -1099,10 +1169,26 @@ async function askChannelChoice(): Promise<ChannelChoice> {
   return choice;
 }
 
-async function askOtherChannelName(): Promise<void> {
+async function askOtherChannelName(): Promise<void | typeof BACK_TO_CHANNEL_SELECTION> {
+  const action = ensureAnswer(
+    await brightSelect<'type' | 'back'>({
+      message: 'Which channel would you like to install?',
+      options: [
+        {
+          value: 'type',
+          label: 'Type the channel name',
+          hint: 'e.g. matrix, github, linear, webex',
+        },
+        { value: 'back', label: '← Back to channel selection' },
+      ],
+      initialValue: 'type',
+    }),
+  );
+  if (action === 'back') return BACK_TO_CHANNEL_SELECTION;
+
   const answer = ensureAnswer(
     await p.text({
-      message: 'Which channel would you like to install?',
+      message: 'Channel name',
       placeholder: 'e.g. matrix, github, linear, webex',
     }),
   );
