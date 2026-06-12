@@ -410,7 +410,9 @@ export class ClaudeProvider implements AgentProvider {
         additionalDirectories: this.additionalDirectories,
         resume: input.continuation,
         pathToClaudeCodeExecutable: '/pnpm/claude',
-        model: DEFAULT_MODEL,
+        // Precedence: group-level model (this.model, from options.model) >
+        // global default (NANOCLAW_DEFAULT_MODEL / DEFAULT_MODEL fallback).
+        model: this.model ?? DEFAULT_MODEL,
         systemPrompt: instructions ? { type: 'preset' as const, preset: 'claude_code' as const, append: instructions } : undefined,
         allowedTools: [
           ...TOOL_ALLOWLIST,
@@ -418,7 +420,6 @@ export class ClaudeProvider implements AgentProvider {
         ],
         disallowedTools: SDK_DISALLOWED_TOOLS,
         env: this.env,
-        model: this.model,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         effort: this.effort as any,
         permissionMode: 'bypassPermissions',
