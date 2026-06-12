@@ -326,7 +326,7 @@ const CLAUDE_CODE_AUTO_COMPACT_WINDOW = process.env.CLAUDE_CODE_AUTO_COMPACT_WIN
  * NANOCLAW_DEFAULT_MODEL — set in host env (or per-agent-group container
  * config) to use a different model without editing source.
  */
-const DEFAULT_MODEL = process.env.NANOCLAW_DEFAULT_MODEL || 'claude-opus-4-7';
+const DEFAULT_MODEL = process.env.NANOCLAW_DEFAULT_MODEL || 'claude-opus-4-8';
 
 /**
  * Stale-session detection. Matches Claude Code's error text when a
